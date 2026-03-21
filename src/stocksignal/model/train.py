@@ -14,12 +14,14 @@ FEATURE_COLS: list[str] = [
     "bb_upper", "bb_lower", "atr",
     "volume_ratio", "return_1w", "return_1m", "return_3m"
 ]
+
 """trains forest classifier to predict hold/buy/sell labels for a given stock ticket based on data
 retrieved from yahoo finance (done in fetch -> build_features)"""
 def train(ticker: str = "AAPL"):
     df = fetch_stock_data(ticker) # gets the raw data from the yfinance api
     df = build_features(df) # calls build features  
     df = add_labels(df)   # assign labels using add_labels function from earlier
+    df.columns = [col[0] if isinstance(col, tuple) else col for col in df.columns]
 
     # create feature table output 
     X = df[FEATURE_COLS] 

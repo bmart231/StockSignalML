@@ -1,0 +1,4 @@
+// to make it less strict about attributes (dont like red)
+{
+  "typeCheckingMode": "off"
+}

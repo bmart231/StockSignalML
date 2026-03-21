@@ -16,29 +16,29 @@ def build_features(df: pd.DataFrame) -> pd.DataFrame | None:
     df["ema_12"] = ta.ema(close, length=12)
     df["ema_26"] = ta.ema(close, length=26)
     
-    # get the momentum
-    df["rsi"] = ta.rsi(close, length=14)
+    # get the momentum indicators
+    df["rsi"] = ta.rsi(close, length=14) # 14 period
     macd = ta.macd(close)
     df["macd"] = macd["MACD_12_26_9"]
     df["macd_signal"] = macd["MACDs_12_26_9"]
 
     # volatility
-    bb = ta.bbands(close, length=20)
-    print(bb.columns.tolist())  # temporary - see actual column names
+    bb = ta.bbands(close, length=20) # uses bollinger bands 
+    print(bb.columns.tolist())  
     df["bb_upper"] = bb.iloc[:, 2]  # upper band
     df["bb_lower"] = bb.iloc[:, 0]  # lower band
-    df["atr"] = ta.atr(high, low, close, length=14)
+    df["atr"] = ta.atr(high, low, close, length=14) # uses this from SMA
 
     # Volume
-    df["volume_sma_20"] = ta.sma(volume, length=20)
-    df["volume_ratio"] = volume / df["volume_sma_20"]
+    df["volume_sma_20"] = ta.sma(volume, length=20) # sma of volume over 20 years
+    df["volume_ratio"] = volume / df["volume_sma_20"] # vol ratio = vol / vol_sma
 
     # Price momentum
-    df["return_1w"] = close.pct_change(5)
-    df["return_1m"] = close.pct_change(21)
+    df["return_1w"] = close.pct_change(5) # percentage changes over 5 days 
+    df["return_1m"] = close.pct_change(21) 
     df["return_3m"] = close.pct_change(63)
 
-    df.dropna(inplace=True)
+    df.dropna(inplace=True) # remove nan rows
     return df
 
 if __name__ == "__main__":
