@@ -11,16 +11,19 @@ FEATURE_COLS = [
 ]
 
 def predict(ticker: str) -> dict:
-    model = joblib.load("model.pkl")
+    '''loads a serialized ML model then computes features for a recent stock given
+    ticker, and then produces a classification signal for what is the best action'''
+    model = joblib.load("model.pkl") # load model with saved data from trained dataset
 
-    df = fetch_stock_data(ticker, period="6mo")
-    df = build_features(df)
+    df = fetch_stock_data(ticker, period="6mo") # get the ticker from last 6 months
+    df = build_features(df) # train
 
-    latest = df[FEATURE_COLS].iloc[[-1]]
-    signal = model.predict(latest)[0]
-    proba = model.predict_proba(latest)[0]
-    classes = model.classes_
+    latest = df[FEATURE_COLS].iloc[[-1]] # grabs the most recent data hence last col
+    signal = model.predict(latest)[0] # assign signals 
+    proba = model.predict_proba(latest)[0] # run probabilities  
+    classes = model.classes_ #assigns the classes 
 
+    # returns the confidence
     confidence = {c: round(float(p), 3) for c, p in zip(classes, proba)}
 
     return {
