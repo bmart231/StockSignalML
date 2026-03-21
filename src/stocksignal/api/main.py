@@ -1,7 +1,13 @@
+import joblib
+import shap
+import numpy as np
+import httpx
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from stocksignal.model.predict import predict
+from stocksignal.data.fetcher import fetch_stock_data
+from stocksignal.features.build_features import build_features
 
 app = FastAPI(title="StockSignal API")
 
@@ -12,6 +18,13 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+FEATURE_COLS = [
+    "sma_20", "sma_50", "ema_12", "ema_26",
+    "rsi", "macd", "macd_signal",
+    "bb_upper", "bb_lower", "atr",
+    "volume_ratio", "return_1w", "return_1m", "return_3m"
+]
 
 class SignalResponse(BaseModel):
     ticker: str
@@ -30,14 +43,59 @@ def get_signal(ticker: str):
 def health():
     return {"status": "ok"}
 
-import httpx
-
 @app.get("/stockinfo/{ticker}")
 async def get_stock_info(ticker: str):
     try:
         url = f"https://query1.finance.yahoo.com/v8/finance/chart/{ticker}?interval=1d&range=1mo"
         async with httpx.AsyncClient() as client:
-            res = await client.get(url, headers={"User-Agent": "Mozilla/5.0"})
+            res = await client.get(url, headers={"User-Agent": "Mozilla/5.0"}, timeout=5.0)
             return res.json()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/explain/{ticker}")
+def explain_signal(ticker: str):
+    try:
+        model = joblib.load("model.pkl")
+        le = joblib.load("label_encoder.pkl")
+
+        df = fetch_stock_data(ticker, period="6mo")
+        df = build_features(df)
+        df.columns = [col[0] if isinstance(col, tuple) else col for col in df.columns]
+
+        latest = df[FEATURE_COLS].iloc[[-1]]
+
+        explainer = shap.TreeExplainer(model)
+        shap_values = explainer.shap_values(latest)
+
+        # get predicted class index
+        pred_enc = int(model.predict(latest)[0])
+        signal = le.inverse_transform([pred_enc])[0]
+
+        # handle both 2D and 3D shap value arrays
+        if isinstance(shap_values, list):
+            # list of arrays (one per class) — index by predicted class
+            class_shap = shap_values[pred_enc][0]
+        elif len(shap_values.shape) == 3:
+            # 3D array (samples, features, classes)
+            class_shap = shap_values[0, :, pred_enc]
+        else:
+            # 2D array (samples, features)
+            class_shap = shap_values[0]
+
+        # pair each feature with its SHAP value
+        explanation = {
+            feature: round(float(value), 4)
+            for feature, value in zip(FEATURE_COLS, class_shap)
+        }
+
+        # sort by absolute importance
+        explanation = dict(sorted(explanation.items(), key=lambda x: abs(x[1]), reverse=True))
+
+        return {
+            "ticker": ticker.upper(),
+            "signal": signal,
+            "explanation": explanation
+        }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

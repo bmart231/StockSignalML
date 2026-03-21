@@ -48,6 +48,49 @@ function ConfidenceBar({ label, value, color }) {
   );
 }
 
+function ExplanationBar({ feature, value }) {
+  const isPositive = value >= 0;
+  const width = Math.min(Math.abs(value) * 300, 100);
+  const label = feature.replace(/_/g, " ").toUpperCase();
+
+  return (
+    <div style={{ marginBottom: "10px" }}>
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          marginBottom: "4px",
+        }}
+      >
+        <span style={{ fontSize: "12px", color: "#6b7280" }}>{label}</span>
+        <span
+          style={{
+            fontSize: "12px",
+            fontWeight: 600,
+            color: isPositive ? "#16a34a" : "#dc2626",
+          }}
+        >
+          {isPositive ? "+" : ""}
+          {value.toFixed(3)}
+        </span>
+      </div>
+      <div
+        style={{ background: "#f3f4f6", borderRadius: "999px", height: "5px" }}
+      >
+        <div
+          style={{
+            width: `${width}%`,
+            background: isPositive ? "#22c55e" : "#ef4444",
+            height: "5px",
+            borderRadius: "999px",
+            transition: "width 0.5s ease",
+          }}
+        />
+      </div>
+    </div>
+  );
+}
+
 function StatCard({ label, value }) {
   return (
     <div
@@ -79,6 +122,7 @@ export default function App() {
   const [ticker, setTicker] = useState("");
   const [result, setResult] = useState(null);
   const [stockInfo, setStockInfo] = useState(null);
+  const [explanation, setExplanation] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
@@ -88,9 +132,10 @@ export default function App() {
     setError(null);
     setResult(null);
     setStockInfo(null);
+    setExplanation(null);
 
     try {
-      // fetch signal from our API first
+      // fetch signal first — show it as soon as it's ready
       const res = await fetch(
         `http://localhost:8000/predict/${ticker.toUpperCase()}`,
       );
@@ -106,7 +151,6 @@ export default function App() {
         );
         if (yahooRes.ok) {
           const yahooData = await yahooRes.json();
-          const meta = yahooData.chart.result[0].meta;
           const timestamps = yahooData.chart.result[0].timestamp;
           const closes = yahooData.chart.result[0].indicators.quote[0].close;
 
@@ -137,6 +181,19 @@ export default function App() {
         }
       } catch {
         // chart failed silently, signal still shows
+      }
+
+      // fetch SHAP explanation separately
+      try {
+        const explainRes = await fetch(
+          `http://localhost:8000/explain/${ticker.toUpperCase()}`,
+        );
+        if (explainRes.ok) {
+          const explainData = await explainRes.json();
+          setExplanation(explainData.explanation);
+        }
+      } catch {
+        // explanation failed silently
       }
     } catch (err) {
       setError("Could not fetch signal. Make sure the API is running.");
@@ -375,6 +432,38 @@ export default function App() {
                 color="#ef4444"
               />
             </div>
+
+            {/* SHAP Explanation */}
+            {explanation && (
+              <div
+                style={{
+                  borderTop: "1px solid #f3f4f6",
+                  paddingTop: "1.25rem",
+                  marginTop: "1.25rem",
+                }}
+              >
+                <p
+                  style={{
+                    fontSize: "12px",
+                    color: "#9ca3af",
+                    margin: "0 0 12px",
+                    textTransform: "uppercase",
+                    letterSpacing: "0.05em",
+                  }}
+                >
+                  Why {result.signal}? — top indicators
+                </p>
+                {Object.entries(explanation)
+                  .slice(0, 7)
+                  .map(([feature, value]) => (
+                    <ExplanationBar
+                      key={feature}
+                      feature={feature}
+                      value={value}
+                    />
+                  ))}
+              </div>
+            )}
           </div>
         )}
 
@@ -388,7 +477,7 @@ export default function App() {
               lineHeight: "1.5",
             }}
           >
-            NOT FINANCIAL ADVICE THIS IS JUST A PROJECT.
+            NOT FINANCIAL ADVICE, JUST DOING THIS FOR PROJECT
           </p>
         )}
       </div>
