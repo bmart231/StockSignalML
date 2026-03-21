@@ -1,5 +1,5 @@
-import pandas as pd
-from sklearn.ensemble import RandomForestClassifier
+from xgboost import XGBClassifier
+from sklearn.preprocessing import LabelEncoder
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import classification_report
 import joblib
@@ -15,30 +15,48 @@ FEATURE_COLS: list[str] = [
     "volume_ratio", "return_1w", "return_1m", "return_3m"
 ]
 
-"""trains forest classifier to predict hold/buy/sell labels for a given stock ticket based on data
-retrieved from yahoo finance (done in fetch -> build_features)"""
-def train(ticker: str = "AAPL"):
-    df = fetch_stock_data(ticker) # gets the raw data from the yfinance api
-    df = build_features(df) # calls build features  
-    df = add_labels(df)   # assign labels using add_labels function from earlier
-    df.columns = [col[0] if isinstance(col, tuple) else col for col in df.columns]
+TICKERS = ["AAPL", "MSFT", "GOOGL", "NVDA", "TSLA", "AMZN", "META"]
 
-    # create feature table output 
-    X = df[FEATURE_COLS] 
-    y = df["label"]
+def train():
+    import pandas as pd
+    all_dfs = []
+
+    for ticker in TICKERS:
+        print(f"Fetching {ticker}...")
+        df = fetch_stock_data(ticker)
+        df = build_features(df)
+        df = add_labels(df)
+        # flatten multi-level columns
+        df.columns = [col[0] if isinstance(col, tuple) else col for col in df.columns]
+        df["ticker"] = ticker
+        all_dfs.append(df)
+
+    # combine all tickers into one dataset
+    combined = pd.concat(all_dfs)
+
+    X = combined[FEATURE_COLS]
+    y = combined["label"]
+
+    # encode string labels to numbers for XGBoost
+    le = LabelEncoder()
+    y_enc = le.fit_transform(y)
 
     X_train, X_test, y_train, y_test = train_test_split(
-        X, y, test_size=0.2, shuffle=False
+        X, y_enc, test_size=0.2, shuffle=False
     )
-    # use random forest classifier to extract data
-    model = RandomForestClassifier(n_estimators=100, random_state=42)
-    model.fit(X_train, y_train)
-    # calls prediction
-    y_pred = model.predict(X_test)
-    print(classification_report(y_test, y_pred)) # output date
 
+    # train XGBoost classifier
+    model = XGBClassifier(n_estimators=100, random_state=42, eval_metric="mlogloss")
+    model.fit(X_train, y_train)
+
+    # decode predictions back to Buy/Sell/Hold for the report
+    y_pred = model.predict(X_test)
+    print(classification_report(y_test, y_pred, target_names=le.classes_))
+
+    # save both model and label encoder
     joblib.dump(model, "model.pkl")
-    print("saved to model.pkl") # saved data
+    joblib.dump(le, "label_encoder.pkl")
+    print("Saved to model.pkl and label_encoder.pkl")
 
 if __name__ == "__main__":
-    train() # call to train 
+    train()

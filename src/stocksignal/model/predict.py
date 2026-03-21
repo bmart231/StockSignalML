@@ -1,5 +1,4 @@
 import joblib
-import pandas as pd
 from stocksignal.data.fetcher import fetch_stock_data
 from stocksignal.features.build_features import build_features
 
@@ -11,19 +10,25 @@ FEATURE_COLS = [
 ]
 
 def predict(ticker: str) -> dict:
-    '''loads a serialized ML model then computes features for a recent stock given
-    ticker, and then produces a classification signal for what is the best action'''
-    model = joblib.load("model.pkl") # load model with saved data from trained dataset
+    # load model and label encoder
+    model = joblib.load("model.pkl")
+    le = joblib.load("label_encoder.pkl")
 
-    df = fetch_stock_data(ticker, period="6mo") # get the ticker from last 6 months
-    df = build_features(df) # train
+    df = fetch_stock_data(ticker, period="6mo")
+    df = build_features(df)
 
-    latest = df[FEATURE_COLS].iloc[[-1]] # grabs the most recent data hence last col
-    signal = model.predict(latest)[0] # assign signals 
-    proba = model.predict_proba(latest)[0] # run probabilities  
-    classes = model.classes_ #assigns the classes 
+    # flatten multi-level columns
+    df.columns = [col[0] if isinstance(col, tuple) else col for col in df.columns]
 
-    # returns the confidence
+    latest = df[FEATURE_COLS].iloc[[-1]]
+
+    # predict and decode label
+    pred_enc = model.predict(latest)
+    signal = le.inverse_transform(pred_enc)[0]
+
+    # get confidence scores for each class
+    proba = model.predict_proba(latest)[0]
+    classes = le.classes_
     confidence = {c: round(float(p), 3) for c, p in zip(classes, proba)}
 
     return {

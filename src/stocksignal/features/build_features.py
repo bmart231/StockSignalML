@@ -2,7 +2,7 @@
 import pandas as pd 
 import pandas_ta as ta
 
-def build_features(df: pd.DataFrame) -> pd.DataFrame | None:
+def build_features(df: pd.DataFrame) -> pd.DataFrame:
     df = df.copy()
     
     close = pd.Series(df["Close"].squeeze().values, index=df.index)
@@ -24,7 +24,6 @@ def build_features(df: pd.DataFrame) -> pd.DataFrame | None:
 
     # volatility
     bb = ta.bbands(close, length=20) # uses bollinger bands 
-    print(bb.columns.tolist())  
     df["bb_upper"] = bb.iloc[:, 2]  # upper band
     df["bb_lower"] = bb.iloc[:, 0]  # lower band
     df["atr"] = ta.atr(high, low, close, length=14) # uses this from SMA
