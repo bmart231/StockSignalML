@@ -2,6 +2,7 @@ import joblib
 import shap
 import numpy as np
 import httpx
+from datetime import datetime, timedelta
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -10,6 +11,9 @@ from stocksignal.data.fetcher import fetch_stock_data
 from stocksignal.features.build_features import build_features
 
 app = FastAPI(title="StockSignal API")
+
+
+
 
 # allow React frontend to talk to the API
 app.add_middleware(
@@ -26,22 +30,47 @@ FEATURE_COLS = [
     "volume_ratio", "return_1w", "return_1m", "return_3m"
 ]
 
+
+
+# simple in-memory cache {key: (result, timestamp)}
+cache = {}
+CACHE_DURATION = timedelta(hours=1)
+
+def get_cached(key: str):
+    if key in cache:
+        result, timestamp = cache[key]
+        if datetime.now() - timestamp < CACHE_DURATION:
+            return result
+    return None
+
+def set_cached(key: str, result):
+    cache[key] = (result, datetime.now())
+
+
 class SignalResponse(BaseModel):
     ticker: str
     signal: str
     confidence: dict[str, float]
 
+
 @app.get("/predict/{ticker}", response_model=SignalResponse)
 def get_signal(ticker: str):
     try:
+        # check cache first
+        cached = get_cached(f"predict_{ticker}")
+        if cached:
+            return cached
         result = predict(ticker.upper())
+        set_cached(f"predict_{ticker}", result)
         return result
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+
 @app.get("/health")
 def health():
     return {"status": "ok"}
+
 
 @app.get("/stockinfo/{ticker}")
 async def get_stock_info(ticker: str):
@@ -53,9 +82,15 @@ async def get_stock_info(ticker: str):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+
 @app.get("/explain/{ticker}")
 def explain_signal(ticker: str):
     try:
+        # check cache first
+        cached = get_cached(f"explain_{ticker}")
+        if cached:
+            return cached
+
         model = joblib.load("model.pkl")
         le = joblib.load("label_encoder.pkl")
 
@@ -92,10 +127,48 @@ def explain_signal(ticker: str):
         # sort by absolute importance
         explanation = dict(sorted(explanation.items(), key=lambda x: abs(x[1]), reverse=True))
 
-        return {
+        result = {
             "ticker": ticker.upper(),
             "signal": signal,
             "explanation": explanation
         }
+
+        set_cached(f"explain_{ticker}", result)
+        return result
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    
+SECTORS = {
+    "tech": ["AAPL", "MSFT", "GOOGL", "NVDA", "META", "AMD", "INTC"],
+    "finance": ["JPM", "BAC", "GS", "MS", "WFC", "C", "BLK"],
+    "energy": ["XOM", "CVX", "COP", "SLB", "EOG", "PSX", "MPC"],
+    "healthcare": ["JNJ", "UNH", "PFE", "ABBV", "MRK", "TMO", "ABT"],
+    "consumer": ["AMZN", "TSLA", "NKE", "MCD", "SBUX", "TGT", "HD"],
+}
+
+@app.get("/sector/{sector}")
+def get_sector_signals(sector: str):
+    try:
+        tickers = SECTORS.get(sector.lower())
+        if not tickers:
+            raise HTTPException(status_code=404, detail=f"Sector '{sector}' not found. Available: {list(SECTORS.keys())}")
+
+        results = []
+        for ticker in tickers:
+            try:
+                cached = get_cached(f"predict_{ticker}")
+                if cached:
+                    results.append(cached)
+                else:
+                    result = predict(ticker)
+                    set_cached(f"predict_{ticker}", result)
+                    results.append(result)
+            except:
+                results.append({"ticker": ticker, "signal": "Error", "confidence": {}})
+
+        return {"sector": sector, "results": results}
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

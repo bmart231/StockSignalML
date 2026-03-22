@@ -15,7 +15,7 @@ FEATURE_COLS: list[str] = [
     "volume_ratio", "return_1w", "return_1m", "return_3m"
 ]
 
-TICKERS = ["AAPL", "MSFT", "GOOGL", "NVDA", "TSLA", "AMZN", "META"]
+TICKERS = ["AAPL", "MSFT", "GOOGL", "NVDA", "TSLA", "AMZN", "META", "RR"]
 
 def train():
     import pandas as pd
