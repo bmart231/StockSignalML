@@ -10,18 +10,23 @@ from stocksignal.model.predict import predict
 from stocksignal.data.fetcher import fetch_stock_data
 from stocksignal.features.build_features import build_features
 
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.responses import JSONResponse
+
 app = FastAPI(title="StockSignal API")
 
 
 
 
 # allow React frontend to talk to the API
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+@app.middleware("http")
+async def add_cors_headers(request: Request, call_next):
+    response = await call_next(request)
+    response.headers["Access-Control-Allow-Origin"] = "*"
+    response.headers["Access-Control-Allow-Methods"] = "*"
+    response.headers["Access-Control-Allow-Headers"] = "*"
+    return response
 
 FEATURE_COLS = [
     "sma_20", "sma_50", "ema_12", "ema_26",
