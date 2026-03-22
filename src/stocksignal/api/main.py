@@ -18,10 +18,7 @@ app = FastAPI(title="StockSignal API")
 # allow React frontend to talk to the API
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:5173",
-        "https://stock-signal-ml.vercel.app"
-    ],
+    allow_origins=["*"],
     allow_methods=["*"],
     allow_headers=["*"],
 )
