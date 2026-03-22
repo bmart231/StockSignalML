@@ -1,10 +1,7 @@
-[phases.setup]
-nixPkgs = ["python313"]
-
 [phases.install]
 cmds = [
-    "pip install -e .",
-    "pip install -r requirements.txt"
+    "pip install -r requirements.txt",
+    "pip install -e ."
 ]
 
 [start]
